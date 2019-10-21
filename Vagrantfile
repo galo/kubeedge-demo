@@ -1,61 +1,96 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+
+use_proxy = true
+use_proxy = ENV['use_proxy'].to_s == 'false' ? false : true  if ENV['use_proxy']
+url_proxy = ENV['http_proxy'] || 'http://web-proxy.corp.hp.com:8080'
+not_proxy = ENV['no_proxy'] || 'localhost,127.0.0.1,.hpicorp.net,15.0.0.0/8,10.0.0.0/8,192.168.0.0/16'
+
+
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
 # configures the configuration version (we support older styles for
 # backwards compatibility). Please don't change it unless you know what
 # you're doing.
 Vagrant.configure("2") do |config|
-  # The most common configuration options are documented and commented below.
-  # For a complete reference, please see the online documentation at
-  # https://docs.vagrantup.com.
+  config.vm.box = "ubuntu/xenial64"
 
-  # Every Vagrant development environment requires a box. You can search for
-  # boxes at https://vagrantcloud.com/search.
-  config.vm.box = "ubuntu/eoan64"
 
-  # Disable automatic box update checking. If you disable this, then
-  # boxes will only be checked for updates when the user runs
-  # `vagrant box outdated`. This is not recommended.
-  # config.vm.box_check_update = false
-
-  # Create a forwarded port mapping which allows access to a specific port
-  # within the machine from a port on the host machine. In the example below,
-  # accessing "localhost:8080" will access port 80 on the guest machine.
-  # NOTE: This will enable public access to the opened port
-  # config.vm.network "forwarded_port", guest: 80, host: 8080
-
-  # Create a forwarded port mapping which allows access to a specific port
-  # within the machine from a port on the host machine and only allow access
-  # via 127.0.0.1 to disable public access
-  # config.vm.network "forwarded_port", guest: 80, host: 8080, host_ip: "127.0.0.1"
-
-  # Create a private network, which allows host-only access to the machine
-  # using a specific IP.
-  # config.vm.network "private_network", ip: "192.168.33.10"
-
-  # Create a public network, which generally matched to bridged network.
-  # Bridged networks make the machine appear as another physical device on
-  # your network.
-  config.vm.network "public_network"
-
-  # Share an additional folder to the guest VM. The first argument is
-  # the path on the host to the actual folder. The second argument is
-  # the path on the guest to mount the folder. And the optional third
-  # argument is a set of non-required options.
-  # config.vm.synced_folder "../data", "/vagrant_data"
-
-  # Provider-specific configuration so you can fine-tune various
-  # backing providers for Vagrant. These expose provider-specific options.
-  # Example for VirtualBox:
+  # Proxy configuration:
   #
-   config.vm.provider "virtualbox" do |vb|
-  #   # Display the VirtualBox GUI when booting the machine
-  #   vb.gui = true
-  #
-  #   # Customize the amount of memory on the VM:
-     vb.memory = "4096"
+  if use_proxy
+    if Vagrant.has_plugin?('vagrant-proxyconf')
+      config.proxy.http     = url_proxy
+      config.proxy.https    = url_proxy
+      config.proxy.no_proxy = not_proxy
+      config.proxy.enabled  = { npm: false }
+    else
+      puts '.'
+      puts 'ERROR: Could not find vagrant-proxyconf plugin.'
+      puts 'INFO: This plugin is required to use this box inside HPinc network.'
+      puts 'INFO: $ vagrant plugin install vagrant-proxyconf'
+      puts 'ERROR: Bailing out.'
+      puts '.'
+      exit 1
+    end
   end
+
+  # VB Guest Additions configuration:
+  #
+  if Vagrant.has_plugin?('vagrant-vbguest')
+    config.vbguest.auto_reboot = true
+    # Do **NOT** force update if image already has pre-installed vbguest
+    # - https://forums.virtualbox.org/viewtopic.php?f=7&t=86819
+    # - https://bugs.launchpad.net/ubuntu/+source/linux/+bug/1783267
+    # - https://stackoverflow.com/questions/37556968/vagrant-disable-guest-additions
+    # 
+    config.vbguest.auto_update = false
+  else
+    puts '.'
+    puts 'WARN: Could not find vagrant-vbguest plugin.'
+    puts 'INFO: This plugin is highly recommended as it ensures that your VB guest additions are up-to-date.'
+    puts 'INFO: $ vagrant plugin install vagrant-vbguest'
+    puts '.'
+  end
+
+
+  # Cache configuration:
+  #
+  if Vagrant.has_plugin?('vagrant-cachier')
+    config.cache.scope = :machine
+    config.cache.auto_detect = false
+    config.cache.enable :apt_lists
+    config.cache.enable :apt
+  else
+    puts '.'
+    puts 'WARN: Could not find vagrant-cachier plugin.'
+    puts 'INFO: This plugin is highly recommended as it reduces the time required to provision the devenv.'
+    puts 'INFO: $ vagrant plugin install vagrant-cachier'
+    puts '.'
+  end
+
+  # Port Forwarding:
+  # Use ~/.vagrant.d/Vagrantfile for adding your service custom ports.
+  #
+  config.vm.network :forwarded_port, guest: 8000,  host: 8000,  auto_correct: true # debug
+  config.vm.network :forwarded_port, guest: 8001,  host: 8001,  auto_correct: true # kubectl proxy
+  config.vm.network :forwarded_port, guest: 8080,  host: 8080,  auto_correct: true # http
+  config.vm.network :forwarded_port, guest: 8443,  host: 8443,  auto_correct: true # https
+  config.vm.network :forwarded_port, guest: 30000, host: 30000, auto_correct: true # localkube dashboard
+
+  
+  config.vm.network :public_network, bridge: 'eth0'
+
+
+
+  config.vm.provider :virtualbox do |vb|
+    vb.name = 'devenv'
+    vb.customize ['modifyvm', :id, '--memory', '2048']
+    vb.customize ['modifyvm', :id, '--cpus', '1']
+    vb.customize ['modifyvm', :id, '--ioapic', 'on']
+    vb.customize ['modifyvm', :id, '--cableconnected1', 'on']
+  end
+
   #
   # View the documentation for the provider you are using for more
   # information on available options.
