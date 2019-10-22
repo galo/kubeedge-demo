@@ -2,7 +2,7 @@
 # vi: set ft=ruby :
 
 
-use_proxy = true
+use_proxy = false
 use_proxy = ENV['use_proxy'].to_s == 'false' ? false : true  if ENV['use_proxy']
 url_proxy = ENV['http_proxy'] || 'http://web-proxy.corp.hp.com:8080'
 not_proxy = ENV['no_proxy'] || 'localhost,127.0.0.1,.hpicorp.net,15.0.0.0/8,10.0.0.0/8,192.168.0.0/16'
@@ -86,7 +86,7 @@ Vagrant.configure("2") do |config|
   config.vm.provider :virtualbox do |vb|
     vb.name = 'devenv'
     vb.customize ['modifyvm', :id, '--memory', '2048']
-    vb.customize ['modifyvm', :id, '--cpus', '1']
+    vb.customize ['modifyvm', :id, '--cpus', '2']
     vb.customize ['modifyvm', :id, '--ioapic', 'on']
     vb.customize ['modifyvm', :id, '--cableconnected1', 'on']
   end
